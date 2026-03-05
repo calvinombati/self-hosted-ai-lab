@@ -8,7 +8,7 @@ OpenClaw AI gateway: single-instance setup and multi-instance provisioning. Runs
 |---|---|---|
 | `<USER>` | Server admin username | `deploy` |
 | `<IP_ADDRESS>` | Server IPv4 | `203.0.113.10` |
-| `<OC_NAME>` | Instance short name | `acme` |
+| `<OC_NAME>` | Instance short name | `work` |
 | `<OC_PORT>` | Instance port (*789 pattern) | `18789` |
 
 ## Architecture
@@ -191,10 +191,10 @@ For multiple independent OpenClaw instances (per project, per client, per API ke
 
 | Convention | Pattern | Example |
 |---|---|---|
-| Username | `oc-<name>` | `oc-acme`, `oc-beta` |
-| Home directory | `/srv/oc-<name>/` | `/srv/oc-acme/` |
+| Username | `oc-<name>` | `oc-work`, `oc-personal` |
+| Home directory | `/srv/oc-<name>/` | `/srv/oc-work/` |
 | Port | `N*1000+789` | 18789, 19789, 20789 |
-| Service | `oc-<name>-gateway.service` | `oc-acme-gateway.service` |
+| Service | `oc-<name>-gateway.service` | `oc-work-gateway.service` |
 
 The last 3 digits (`789`) are a "signature" to instantly recognize OpenClaw ports in `ss -tulpn` or logs.
 
@@ -206,8 +206,8 @@ Create `/srv/openclaw-instances.conf`:
 sudo tee /srv/openclaw-instances.conf > /dev/null << 'EOF'
 # OpenClaw instance registry
 # Format: USERNAME PORT  # optional comment
-oc-acme  18789   # Acme Corp
-oc-beta  19789   # Beta Inc
+oc-work  18789   # Work projects
+oc-personal  19789   # Personal use
 EOF
 ```
 
@@ -238,12 +238,12 @@ The script has two phases:
 sudo openclaw-provision.sh batch /srv/openclaw-instances.conf setup
 
 # Manual onboarding for each instance
-sudo su - oc-acme
-cd /srv/oc-acme && openclaw onboard
+sudo su - oc-work
+cd /srv/oc-work && openclaw onboard
 exit
 
-sudo su - oc-beta
-cd /srv/oc-beta && openclaw onboard
+sudo su - oc-personal
+cd /srv/oc-personal && openclaw onboard
 exit
 
 # Phase 2: create services and start
@@ -267,8 +267,8 @@ Or add to `~/.ssh/config`:
 Host oc-tunnel
     HostName <IP_ADDRESS>
     User <USER>
-    LocalForward 18789 127.0.0.1:18789    # oc-acme
-    LocalForward 19789 127.0.0.1:19789    # oc-beta
+    LocalForward 18789 127.0.0.1:18789    # oc-work
+    LocalForward 19789 127.0.0.1:19789    # oc-personal
 ```
 
 Then: `ssh -N oc-tunnel`

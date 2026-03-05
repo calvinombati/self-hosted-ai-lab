@@ -29,7 +29,7 @@ validate_inputs() {
     local port="$2"
 
     if [[ ! "$user" =~ ^oc-[a-z][a-z0-9-]*$ ]]; then
-        log_error "Invalid username '$user'. Use 'oc-<name>' (e.g., oc-acme, oc-beta)."
+        log_error "Invalid username '$user'. Use 'oc-<name>' (e.g., oc-work, oc-personal)."
         exit 1
     fi
 
@@ -252,9 +252,9 @@ case "${1:-}" in
         echo "  $0 status                                 Show active instances"
         echo ""
         echo "Example:"
-        echo "  $0 setup oc-acme 18789"
+        echo "  $0 setup oc-work 18789"
         echo "  # ... run manual onboarding ..."
-        echo "  $0 service oc-acme 18789"
+        echo "  $0 service oc-work 18789"
         echo ""
         echo "  $0 batch /srv/openclaw-instances.conf setup"
         echo "  # ... run onboarding for each instance ..."

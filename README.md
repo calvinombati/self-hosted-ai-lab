@@ -142,6 +142,15 @@ If you are an AI coding assistant executing these runbooks:
 - Never skip verify steps, even if the command appeared to succeed
 - After completing a runbook, report which steps succeeded and which need attention
 
+### Example prompt
+
+```text
+Read the runbook 01-provisioning.md and execute all steps on a fresh Ubuntu 24.04 VPS.
+Use "fra" as <USER> and "203.0.113.10" as <IP_ADDRESS>.
+Run each command, verify outputs match expected results, and report which steps
+succeeded and which need attention.
+```
+
 ## Going further
 
 This guide focuses on cloud API-based AI tools. If you want to expand your setup:
