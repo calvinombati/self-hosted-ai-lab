@@ -1,8 +1,8 @@
-# Self-hosted AI setup
+# Self-hosted AI lab
 
-> Production-ready VPS for AI automation: hardened infrastructure, n8n workflows, OpenClaw AI gateway. From zero to running in under an hour.
+> Production-ready VPS for AI automation with n8n workflows and OpenClaw AI gateway. Hardened infrastructure and AI-executable runbooks.
 
-**LLM-executable**: every runbook follows a Precondition / Action / Verify pattern designed for [Claude Code](https://claude.ai/code) or any AI coding assistant. Give a runbook to your assistant and it will execute the setup for you. Also works perfectly fine as a guide for humans.
+Every runbook follows a Precondition / Action / Verify pattern designed for [Claude Code](https://claude.ai/code) or any AI coding assistant. Give a runbook to your assistant and it will execute the setup for you. Also works perfectly fine as a guide for humans.
 
 ## What you build
 
