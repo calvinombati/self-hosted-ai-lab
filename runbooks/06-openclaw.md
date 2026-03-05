@@ -169,6 +169,20 @@ ssh -L <OC_PORT>:localhost:<OC_PORT> <USER>@<IP_ADDRESS> -N
 
 Open `http://localhost:<OC_PORT>` in your browser.
 
+### Alternative: Tailscale (zero public ports)
+
+Instead of SSH tunnels, you can use [Tailscale](https://tailscale.com/) for a persistent mesh VPN:
+
+```bash
+# On the server
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+Then access OpenClaw directly via the Tailscale IP (e.g., `http://100.x.y.z:<OC_PORT>`) from any device on your tailnet. No tunnel to manage, works from mobile, survives SSH disconnects.
+
+> Note: Tailscale is free for personal use (up to 100 devices). If you use Tailscale, OpenClaw still binds to `127.0.0.1` - configure it to bind to `0.0.0.0` or the Tailscale interface instead, and restrict access via Tailscale ACLs. This is a more advanced setup covered in detail by [community guides](https://dev.to/nunc/self-hosting-openclaw-ai-assistant-on-a-vps-with-tailscale-vpn-zero-public-ports-35fn).
+
 ## Part B - Multi-instance provisioning
 
 For multiple independent OpenClaw instances (per project, per client, per API key).
@@ -307,4 +321,4 @@ sudo openclaw-provision.sh status
 
 ## Next
 
-Proceed to [07-maintenance.md](07-maintenance.md).
+Proceed to [07-monitoring.md](07-monitoring.md).

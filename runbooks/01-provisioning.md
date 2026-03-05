@@ -18,11 +18,13 @@ The template at [`templates/cloud-init.yaml`](../templates/cloud-init.yaml) auto
 2. Creates admin user with SSH key-only auth and passwordless sudo
 3. Writes SSH hardening drop-in, Fail2Ban config, and auto-upgrade config
 4. Installs base packages + Docker CE from official repo
-5. Sets up UFW firewall (deny incoming, allow 22/80/443)
-6. Enables Fail2Ban and unattended-upgrades
-7. Creates `/srv/docker/` with correct permissions
-8. Installs lazydocker
-9. Reboots
+5. Configures Docker log rotation (`daemon.json`)
+6. Creates 2 GB swap file (prevents OOM on small instances)
+7. Sets up UFW firewall (deny incoming, allow 22/80/443)
+8. Enables Fail2Ban and unattended-upgrades
+9. Creates `/srv/docker/` with correct permissions
+10. Installs lazydocker
+11. Reboots
 
 ## Step 1 - Prepare cloud-init
 

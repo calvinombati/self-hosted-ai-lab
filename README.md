@@ -10,11 +10,13 @@ Also works perfectly fine as a guide for humans.
 
 A hardened Ubuntu server running:
 
-- **Docker** with organized project structure
+- **Docker** with organized project structure and log rotation
 - **Caddy** as reverse proxy with automatic HTTPS
-- **n8n** for workflow automation (with PostgreSQL)
+- **n8n** for workflow automation (with PostgreSQL, encrypted credentials)
 - **OpenClaw** as AI gateway (multi-instance support)
-- **Fail2Ban**, **UFW**, and SSH hardening out of the box
+- **Fail2Ban**, **UFW**, swap, and SSH hardening out of the box
+- **Monitoring** via external services or self-hosted Uptime Kuma
+- **Automated backups** with restic, PostgreSQL dumps, and restore verification
 
 ## Quick start
 
@@ -24,12 +26,14 @@ A hardened Ubuntu server running:
 | # | Runbook | What it does |
 |---|---------|-------------|
 | 01 | [Provisioning](runbooks/01-provisioning.md) | Cloud-init, first boot, post-provision verification |
-| 02 | [Hardening](runbooks/02-hardening.md) | SSH drop-in, Fail2Ban, UFW, dual-layer firewall |
-| 03 | [Docker](runbooks/03-docker.md) | Docker CE, Compose, directory conventions, lazydocker |
+| 02 | [Hardening](runbooks/02-hardening.md) | SSH drop-in, Fail2Ban, UFW, swap, dual-layer firewall |
+| 03 | [Docker](runbooks/03-docker.md) | Docker CE, Compose, log rotation, lazydocker |
 | 04 | [Caddy](runbooks/04-caddy.md) | Reverse proxy, automatic HTTPS, Caddyfile |
-| 05 | [n8n](runbooks/05-n8n.md) | n8n + PostgreSQL via Docker Compose |
-| 06 | [OpenClaw](runbooks/06-openclaw.md) | AI gateway, single and multi-instance, provisioning script |
-| 07 | [Maintenance](runbooks/07-maintenance.md) | Updates, backups, troubleshooting, key rotation |
+| 05 | [n8n](runbooks/05-n8n.md) | n8n + PostgreSQL, encryption key, proxy config |
+| 06 | [OpenClaw](runbooks/06-openclaw.md) | AI gateway, multi-instance, Tailscale alternative |
+| 07 | [Monitoring](runbooks/07-monitoring.md) | Uptime checks, alerting, Uptime Kuma |
+| 08 | [Backups](runbooks/08-backups.md) | Automated restic, pg_dump, restore verification |
+| 09 | [Maintenance](runbooks/09-maintenance.md) | Updates, SSH key rotation, troubleshooting |
 
 Each runbook is self-contained. You can stop at any step and have a working server.
 

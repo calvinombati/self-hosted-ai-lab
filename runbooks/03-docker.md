@@ -92,7 +92,36 @@ Rules:
 - Permissions: `2770` (SGID - new files inherit docker group)
 - Any user in the `docker` group can read/write
 
-## Step 4 - Install lazydocker
+## Step 4 - Configure log rotation
+
+Without log rotation, Docker containers can fill the disk. Configure the Docker daemon to limit log size:
+
+```bash
+sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+
+sudo systemctl restart docker
+```
+
+Verify:
+
+```bash
+docker info --format '{{.LoggingDriver}}'
+cat /etc/docker/daemon.json
+```
+
+Verify: logging driver is `json-file`, max-size and max-file are set.
+
+> Note: this applies to all new containers. Existing containers keep their current log config until recreated (`docker compose up -d` is enough).
+
+## Step 5 - Install lazydocker
 
 lazydocker is a terminal UI for Docker. Useful on headless servers.
 
@@ -108,7 +137,7 @@ lazydocker --version
 
 > Note: if the install script returns 404, the URL may have changed. Check the [lazydocker releases](https://github.com/jesseduffield/lazydocker/releases) page for current install instructions.
 
-## Step 5 - Create shared Docker network
+## Step 6 - Create shared Docker network
 
 Services that need to communicate (e.g., Caddy reverse proxy with n8n) use a shared network:
 
@@ -151,6 +180,7 @@ docker system prune -a --volumes
 - [ ] Docker Compose plugin installed
 - [ ] `<USER>` is in docker group
 - [ ] `/srv/docker/` exists with correct permissions (root:docker, 2770, SGID)
+- [ ] Log rotation configured in `/etc/docker/daemon.json`
 - [ ] lazydocker installed
 - [ ] `caddy-net` Docker network created
 

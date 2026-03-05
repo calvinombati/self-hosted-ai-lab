@@ -131,6 +131,12 @@ curl -I https://<DOMAIN_N8N>
 
 Verify: HTTP response (may be 502 if n8n is not running yet - that's OK, it means Caddy is working and has a valid certificate).
 
+## Rate limiting (optional)
+
+If you expose webhook endpoints (e.g., n8n webhooks), consider adding rate limiting. Caddy supports this via the `rate_limit` directive (requires the [caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) plugin) or via a custom Caddy build.
+
+A simpler alternative: use n8n's built-in webhook authentication (Header Auth, Basic Auth, or JWT) and rely on Fail2Ban + provider firewall for abuse prevention.
+
 ## Adding services
 
 To add a new service behind Caddy:

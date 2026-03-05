@@ -97,6 +97,26 @@ runcmd:
   # Add user to docker group AFTER install (group doesn't exist before)
   - usermod -aG docker <USER>
 
+  # --- Docker log rotation ---
+  - |
+    cat > /etc/docker/daemon.json << 'DAEMON'
+    {
+      "log-driver": "json-file",
+      "log-opts": {
+        "max-size": "10m",
+        "max-file": "3"
+      }
+    }
+    DAEMON
+  - systemctl restart docker
+
+  # --- Swap (2 GB, useful for instances with 4 GB RAM or less) ---
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
   # --- lazydocker ---
   - curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | DIR=/usr/local/bin bash
 

@@ -169,6 +169,38 @@ These tools appear in many older guides but have low ROI on a modern server in a
 | **bsd-mailx / postfix** | Useless without an external SMTP relay. Install only if you configure a relay (SMTP2GO, Mailgun). |
 | **net-tools** | Legacy (`ifconfig`, `netstat`). Replaced by `ip` and `ss`, preinstalled on Ubuntu 24.04. |
 
+## Swap file
+
+Cloud-init creates a 2 GB swap file. Verify:
+
+```bash
+swapon --show
+free -h
+```
+
+Verify: a swap entry exists (2 GB). If missing:
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+> Note: swap prevents the OOM killer from terminating processes on instances with 4 GB RAM or less. On larger instances, it still provides a safety net during memory spikes.
+
+## One-time security audit (optional)
+
+Run Lynis for a quick security assessment after setup:
+
+```bash
+sudo apt install -y lynis
+sudo lynis audit system --quick
+```
+
+Review the output for warnings and suggestions. This is a one-time check, not a recurring service.
+
 ## Periodic monitoring
 
 ```bash

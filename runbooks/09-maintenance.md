@@ -1,6 +1,6 @@
-# 07 - Maintenance
+# 09 - Maintenance
 
-OS updates, Docker image updates, backups, SSH key rotation, and troubleshooting.
+OS updates, Docker image updates, OpenClaw updates, SSH key rotation, and troubleshooting.
 
 ## Placeholders
 
@@ -65,6 +65,8 @@ Check this table before a new provisioning or after several months.
 | **Docker CE** | From official repo | [docker release notes](https://docs.docker.com/engine/release-notes/) |
 | **lazydocker** | Latest (install script) | [lazydocker releases](https://github.com/jesseduffield/lazydocker/releases) |
 | **OpenClaw** | `@latest` (npm) | [npmjs.com/package/openclaw](https://www.npmjs.com/package/openclaw) |
+| **Uptime Kuma** | `1` (major pinned) | [uptime-kuma releases](https://github.com/louislam/uptime-kuma/releases) |
+| **restic** | From apt repo | [restic releases](https://github.com/restic/restic/releases) |
 
 > Note: URLs with explicit versions (like nvm) do NOT auto-update. If you copy the cloud-init template months later without checking this table, you install today's version.
 
@@ -90,36 +92,6 @@ ssh -i ~/.ssh/id_ed25519_new <USER>@<IP_ADDRESS>
 ```
 
 **Never remove the old key before verifying the new one works.** Keep a backup SSH session open during the entire process.
-
-## Backup targets
-
-| Path | Contents |
-|---|---|
-| `/srv/docker/` | All docker-compose.yml, .env, container data |
-| `/etc/ssh/sshd_config.d/` | SSH hardening drop-in |
-| `/etc/fail2ban/jail.local` | Fail2Ban config |
-| `/etc/apt/apt.conf.d/20auto-upgrades` | Auto-upgrade config |
-| `/etc/ufw/` | UFW rules (user.rules, user6.rules) |
-| `/home/<USER>/.ssh/authorized_keys` | Authorized SSH keys |
-| `/srv/oc-*/` | OpenClaw instances (config, data) |
-| `/srv/openclaw-instances.conf` | Instance registry |
-
-### Recommended backup tool: restic
-
-```bash
-sudo apt install restic
-
-# Initialize repository (once)
-restic -r s3:<ENDPOINT>/<BUCKET> init
-
-# Backup
-restic -r s3:<ENDPOINT>/<BUCKET> backup /srv/docker/ /etc/ssh/ /etc/fail2ban/ /srv/oc-*/
-
-# Retention policy: 7 daily, 4 weekly, 6 monthly
-restic -r s3:<ENDPOINT>/<BUCKET> forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
-```
-
-Compatible backends: Hetzner Storage Box, Backblaze B2, AWS S3, any S3-compatible storage.
 
 ## Troubleshooting
 
@@ -150,6 +122,15 @@ Compatible backends: Hetzner Storage Box, Backblaze B2, AWS S3, any S3-compatibl
 | 502 Bad Gateway | Backend service not running | Check target container is running and on `caddy-net` |
 | Config syntax error | `docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile` | Fix Caddyfile syntax |
 
+### Backups
+
+| Problem | Diagnosis | Fix |
+|---|---|---|
+| Backup timer not running | `systemctl list-timers \| grep backup` | `sudo systemctl enable --now backup.timer` |
+| Restic lock stale | `restic unlock` | Another backup may have crashed |
+| Restore fails | `restic check` | Verify repository integrity |
+| pg_dump fails | `docker logs n8n-postgres` | Check container is running and healthy |
+
 ### General diagnostics
 
 ```bash
@@ -162,7 +143,7 @@ htop
 # Failed services
 systemctl --failed
 
-# Active timers
+# Active timers (backup, certbot, apt)
 systemctl list-timers --all
 
 # Quick connectivity reference
@@ -174,6 +155,6 @@ ssh -L <LOCAL_PORT>:127.0.0.1:<REMOTE_PORT> <USER>@<IP_ADDRESS>  # tunnel
 
 - [ ] Understand which updates are automatic (security) and which are manual (full upgrade, Docker images, OpenClaw)
 - [ ] Versioned components table reviewed and up to date
-- [ ] Backup strategy decided (at minimum: provider snapshots)
+- [ ] Backup timer running (see [08-backups.md](08-backups.md))
 - [ ] Know how to rotate SSH keys safely
 - [ ] Know how to recover via VNC console if SSH is locked out
