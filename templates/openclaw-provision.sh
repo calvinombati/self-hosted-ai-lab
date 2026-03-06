@@ -66,7 +66,7 @@ phase_setup() {
 
     log_info "Installing nvm, Node.js ${NODE_MAJOR}, and OpenClaw for '$user'..."
 
-    sudo su - "$user" bash << SETUP_EOF
+    sudo -u "$user" bash -l << SETUP_EOF
 set -euo pipefail
 
 # nvm
@@ -208,8 +208,12 @@ phase_batch() {
 
     log_info "Batch processing from '$config_file' (phase: $phase)..."
 
-    while IFS=' ' read -r user port; do
-        [[ -z "$user" || "$user" =~ ^# ]] && continue
+    while IFS= read -r line; do
+        # Strip trailing comments and skip empty/comment-only lines
+        line="${line%%#*}"
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]] && continue
+        read -r user port <<< "$line"
+        [[ -z "$user" || -z "$port" ]] && continue
         validate_inputs "$user" "$port"
         case "$phase" in
             setup)   phase_setup "$user" "$port" ;;

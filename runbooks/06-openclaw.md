@@ -47,7 +47,7 @@ Verify: directory exists, owned by `oc-<OC_NAME>`.
 ### Step 2 - Install nvm + Node.js
 
 ```bash
-sudo su - oc-<OC_NAME> << 'SETUP'
+sudo -u oc-<OC_NAME> bash -l << 'SETUP'
 # Install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
 
