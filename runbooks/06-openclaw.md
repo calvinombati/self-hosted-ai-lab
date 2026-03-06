@@ -10,6 +10,8 @@ OpenClaw AI gateway: single-instance setup and multi-instance provisioning. Runs
 | `<IP_ADDRESS>` | Server IPv4 | `203.0.113.10` |
 | `<OC_NAME>` | Instance short name | `work` |
 | `<OC_PORT>` | Instance port (*789 pattern) | `18789` |
+| `<OPENCLAW_BIN_PATH>` | Full path to openclaw binary (from Step 3) | `/srv/oc-work/.nvm/versions/node/v22.22.1/bin/openclaw` |
+| `<NODE_VERSION>` | Node.js version installed via nvm | `v22.22.1` |
 
 ## Architecture
 
@@ -174,7 +176,7 @@ The "Skills status" section should show no missing requirements for the enabled 
 
 ### Step 6 - Create systemd service
 
-Replace `<OPENCLAW_BIN_PATH>` with the full path from Step 3.
+Replace `<OPENCLAW_BIN_PATH>` and `<NODE_VERSION>` with values from Step 3. The `PATH` environment variable is required because nvm only loads in interactive shells (Ubuntu's `.bashrc` has a non-interactive guard), so systemd cannot find node or skill dependencies without it.
 
 ```bash
 sudo tee /etc/systemd/system/oc-<OC_NAME>-gateway.service > /dev/null << EOF
@@ -187,9 +189,10 @@ Wants=network-online.target
 Type=simple
 User=oc-<OC_NAME>
 WorkingDirectory=/srv/oc-<OC_NAME>
-ExecStart=<OPENCLAW_BIN_PATH> gateway --port <OC_PORT>
+ExecStart=<OPENCLAW_BIN_PATH> gateway run --port <OC_PORT>
 Environment=HOME=/srv/oc-<OC_NAME>
 Environment=NODE_ENV=production
+Environment=PATH=/srv/oc-<OC_NAME>/.nvm/versions/node/<NODE_VERSION>/bin:/usr/local/bin:/usr/bin:/bin
 StandardOutput=journal
 StandardError=journal
 Restart=always

@@ -151,9 +151,10 @@ Wants=network-online.target
 Type=simple
 User=${user}
 WorkingDirectory=${home}
-ExecStart=${openclaw_bin} gateway --port ${port}
+ExecStart=${openclaw_bin} gateway run --port ${port}
 Environment=HOME=${home}
 Environment=NODE_ENV=production
+Environment=PATH=$(dirname ${openclaw_bin}):/usr/local/bin:/usr/bin:/bin
 StandardOutput=journal
 StandardError=journal
 Restart=always
