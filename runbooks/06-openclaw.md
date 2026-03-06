@@ -109,7 +109,70 @@ Verify: permissions are `-rw-------` (600). If not:
 sudo chmod 600 /srv/oc-<OC_NAME>/.openclaw/config.json
 ```
 
-### Step 5 - Create systemd service
+### Step 5 - Install skill dependencies
+
+During onboarding the wizard lets you enable skills and hooks. The recommended minimum set is:
+
+**Skills:** `openai-whisper`, `nano-pdf`, `summarize`, `github`
+**Hooks:** `boot-md`, `bootstrap-extra-files`, `command-logger`, `session-memory`
+
+These skills require external dependencies. Some are shared system packages (install once as admin), others are per-user (install for each `oc-*` user).
+
+> Note: if you enable additional skills beyond this set, check their dependencies with `openclaw doctor` and apply the same global/local criteria described here.
+
+#### Global dependencies (once, as admin)
+
+These are system-wide packages shared by all `oc-*` instances. Run as your admin user:
+
+```bash
+# ffmpeg - audio/video processing (whisper, media skills)
+sudo apt install -y ffmpeg
+
+# gh - GitHub CLI (github skill)
+sudo apt install -y gh
+
+# uv - Python package manager (Python-based skills: whisper, nano-pdf)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo cp ~/.local/bin/uv ~/.local/bin/uvx /usr/local/bin/
+```
+
+Verify:
+
+```bash
+ffmpeg -version | head -1
+gh --version
+uv --version
+```
+
+#### Per-user dependencies (for each oc-* user)
+
+Run for the specific `oc-*` user. Since nvm only loads in interactive shells, source it explicitly:
+
+```bash
+sudo -u oc-<OC_NAME> bash -c '
+  export HOME=/srv/oc-<OC_NAME>
+  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
+  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+
+  # @steipete/summarize - web/document summarization (summarize skill)
+  npm install -g @steipete/summarize
+'
+```
+
+Verify all dependencies are detected:
+
+```bash
+sudo -u oc-<OC_NAME> bash -c '
+  export HOME=/srv/oc-<OC_NAME>
+  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
+  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  openclaw doctor
+'
+```
+
+The "Skills status" section should show no missing requirements for the enabled skills. Warnings about systemd user services are expected and resolved in the next step.
+
+### Step 6 - Create systemd service
 
 Replace `<OPENCLAW_BIN_PATH>` with the full path from Step 3.
 
@@ -137,7 +200,7 @@ WantedBy=multi-user.target
 EOF
 ```
 
-### Step 6 - Enable and start
+### Step 7 - Enable and start
 
 ```bash
 sudo systemctl daemon-reload
@@ -159,7 +222,7 @@ ss -tulpn | grep <OC_PORT>
 
 Verify: listening on `127.0.0.1:<OC_PORT>`. If it shows `0.0.0.0:<OC_PORT>`, the service is publicly exposed - stop it immediately and investigate.
 
-### Step 7 - Access via SSH tunnel
+### Step 8 - Access via SSH tunnel
 
 From your local machine:
 
@@ -246,6 +309,15 @@ sudo su - oc-personal
 cd /srv/oc-personal && openclaw onboard
 exit
 
+# Install per-user dependencies for each instance (see Step 5)
+for user in oc-work oc-personal; do
+  sudo -u "$user" bash -c "
+    export HOME=/srv/$user NVM_DIR=/srv/$user/.nvm
+    source /srv/$user/.nvm/nvm.sh
+    npm install -g @steipete/summarize
+  "
+done
+
 # Phase 2: create services and start
 sudo openclaw-provision.sh batch /srv/openclaw-instances.conf service
 
@@ -317,6 +389,9 @@ sudo openclaw-provision.sh status
 - [ ] OpenClaw installed
 - [ ] Onboarding completed, API keys configured
 - [ ] config.json permissions are `600`
+- [ ] Global dependencies installed (ffmpeg, gh, uv) - once per server
+- [ ] Per-user dependencies installed (@steipete/summarize)
+- [ ] `openclaw doctor` shows no missing requirements for enabled skills
 - [ ] systemd service created with correct ExecStart path
 - [ ] Service enabled and running
 - [ ] Listening on `127.0.0.1:<OC_PORT>` (verified with `ss`)
