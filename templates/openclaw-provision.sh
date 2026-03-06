@@ -155,6 +155,7 @@ ExecStart=${openclaw_bin} gateway run --port ${port}
 Environment=HOME=${home}
 Environment=NODE_ENV=production
 Environment=PATH=$(dirname ${openclaw_bin}):/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-${home}/.openclaw/env
 StandardOutput=journal
 StandardError=journal
 Restart=always

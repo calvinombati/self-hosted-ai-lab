@@ -174,6 +174,47 @@ sudo -u oc-<OC_NAME> bash -c '
 
 The "Skills status" section should show no missing requirements for the enabled skills. Warnings about systemd user services are expected and resolved in the next step.
 
+#### Memory search (optional but recommended)
+
+The `session-memory` hook uses semantic search (vector embeddings) to recall previous conversations. This requires an embedding provider with an API key. If you authenticated the main agent via OAuth (e.g., OpenAI Pro subscription), the OAuth token does not cover the embedding API - you need a separate API key.
+
+The API key is used **only** for embeddings. The main agent continues to use OAuth for conversations - no API credits are consumed for chat.
+
+Configure the provider:
+
+```bash
+sudo -u oc-<OC_NAME> bash -c '
+  export HOME=/srv/oc-<OC_NAME>
+  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
+  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  openclaw config set agents.defaults.memorySearch.provider openai
+'
+```
+
+Create an environment file with the API key (permissions `600` so only the instance user can read it):
+
+```bash
+echo "OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>" | sudo tee /srv/oc-<OC_NAME>/.openclaw/env > /dev/null
+sudo chown oc-<OC_NAME>:oc-<OC_NAME> /srv/oc-<OC_NAME>/.openclaw/env
+sudo chmod 600 /srv/oc-<OC_NAME>/.openclaw/env
+```
+
+This file will be loaded by the systemd service in the next step via `EnvironmentFile`. Do not put API keys directly in service files (they are readable by any user via `systemctl cat`).
+
+Verify (pass the key for the check):
+
+```bash
+sudo -u oc-<OC_NAME> bash -c '
+  export HOME=/srv/oc-<OC_NAME>
+  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
+  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  source /srv/oc-<OC_NAME>/.openclaw/env
+  openclaw memory status
+'
+```
+
+Verify: `provider` is `openai` and `searchMode` is `hybrid`. If you skip this step, memory search falls back to `fts-only` (full-text search without vector embeddings).
+
 ### Step 6 - Create systemd service
 
 Replace `<OPENCLAW_BIN_PATH>` and `<NODE_VERSION>` with values from Step 3. The `PATH` environment variable is required because nvm only loads in interactive shells (Ubuntu's `.bashrc` has a non-interactive guard), so systemd cannot find node or skill dependencies without it.
@@ -193,6 +234,7 @@ ExecStart=<OPENCLAW_BIN_PATH> gateway run --port <OC_PORT>
 Environment=HOME=/srv/oc-<OC_NAME>
 Environment=NODE_ENV=production
 Environment=PATH=/srv/oc-<OC_NAME>/.nvm/versions/node/<NODE_VERSION>/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/srv/oc-<OC_NAME>/.openclaw/env
 StandardOutput=journal
 StandardError=journal
 Restart=always
@@ -395,7 +437,8 @@ sudo openclaw-provision.sh status
 - [ ] Global dependencies installed (ffmpeg, gh, uv) - once per server
 - [ ] Per-user dependencies installed (@steipete/summarize)
 - [ ] `openclaw doctor` shows no missing requirements for enabled skills
-- [ ] systemd service created with correct ExecStart path
+- [ ] (Optional) Memory search configured with embedding provider and env file
+- [ ] systemd service created with correct ExecStart path and EnvironmentFile
 - [ ] Service enabled and running
 - [ ] Listening on `127.0.0.1:<OC_PORT>` (verified with `ss`)
 - [ ] SSH tunnel works from local machine
