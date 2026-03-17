@@ -179,17 +179,9 @@ The `session-memory` hook uses semantic search (vector embeddings) to recall pre
 
 The API key is used **only** for embeddings. The main agent continues to use OAuth for conversations - no API credits are consumed for chat.
 
-Configure the provider:
+You do not need to configure the provider explicitly. When no provider is set, openclaw uses `auto` and picks a provider based on what credentials are available in the credential store.
 
-```bash
-sudo -u oc-<OC_NAME> bash -c '
-  export HOME=/srv/oc-<OC_NAME>
-  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
-  openclaw config set agents.defaults.memorySearch.provider openai
-'
-```
-
-Create an environment file with the API key (permissions `600` so only the instance user can read it):
+##### Step A - create the env file
 
 ```bash
 echo "OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>" | sudo tee /srv/oc-<OC_NAME>/.openclaw/env > /dev/null
@@ -197,20 +189,71 @@ sudo chown oc-<OC_NAME>:oc-<OC_NAME> /srv/oc-<OC_NAME>/.openclaw/env
 sudo chmod 600 /srv/oc-<OC_NAME>/.openclaw/env
 ```
 
-This file will be loaded by the systemd service in Step 7 via `EnvironmentFile`. Do not put API keys directly in service files (they are readable by any user via `systemctl cat`).
+Do not put API keys directly in service files (they are readable by any user via `systemctl cat`).
 
-Verify (pass the key for the check):
+##### Step B - register the key in the openclaw credential store
+
+**This is the critical step.** The env file alone is not enough: openclaw looks for API keys in its own credential store (`auth-profiles.json`), not in the process environment. Even if `OPENAI_API_KEY` is exported in the shell or in the service, it is ignored unless registered in the store.
+
+The official method is `paste-token`, which requires a TTY. Run it as the instance user via a direct SSH session:
+
+```bash
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+export PATH="$HOME/.local/bin:$PATH"
+source ~/.openclaw/env
+openclaw models auth paste-token --provider openai --profile-id openai:manual
+# paste the key when prompted, then press enter
+```
+
+**Workaround if TTY is not available** (e.g. from a script or `sudo -u`): write the profile directly into `auth-profiles.json`:
+
+```bash
+sudo -u oc-<OC_NAME> python3 - <<'EOF'
+import json, os
+path = os.path.expanduser("~/.openclaw/agents/main/agent/auth-profiles.json")
+with open(path) as f:
+    data = json.load(f)
+data["profiles"]["openai:manual"] = {
+    "type": "api_key",
+    "provider": "openai",
+    "apiKey": "sk-proj-<YOUR_OPENAI_API_KEY>"
+}
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+print("Done")
+EOF
+```
+
+##### Step C - systemd drop-in to load the env file in the service
+
+`openclaw gateway install` generates the service file without an `EnvironmentFile` directive. Add a drop-in that survives future `gateway install --force` calls:
 
 ```bash
 sudo -u oc-<OC_NAME> bash -c '
-  export HOME=/srv/oc-<OC_NAME>
-  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
-  source /srv/oc-<OC_NAME>/.openclaw/env
-  openclaw memory status
+  mkdir -p ~/.config/systemd/user/openclaw-gateway.service.d
+  cat > ~/.config/systemd/user/openclaw-gateway.service.d/env.conf <<EOF
+[Service]
+EnvironmentFile=%h/.openclaw/env
+EOF
 '
 ```
 
-Verify: `provider` is `openai` and `searchMode` is `hybrid`. If you skip this step, memory search falls back to `fts-only` (full-text search without vector embeddings).
+Then reload and restart (via direct SSH as the instance user):
+
+```bash
+systemctl --user daemon-reload
+openclaw gateway restart
+```
+
+##### Verify
+
+```bash
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+export PATH="$HOME/.local/bin:$PATH"
+openclaw memory status --deep
+```
+
+Verify: `provider` is `openai` (or `auto`), `Embeddings: ready`, files indexed. If you skip this step, memory search falls back to `fts-only` (full-text search without vector embeddings).
 
 ### Step 6 - Enable linger
 
