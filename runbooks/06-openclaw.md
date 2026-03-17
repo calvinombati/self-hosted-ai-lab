@@ -238,7 +238,7 @@ EOF
 '
 ```
 
-Then reload and restart (via direct SSH as the instance user):
+Then reload and restart (via direct SSH as the instance user) — **after completing Step 7 (service install)**:
 
 ```bash
 systemctl --user daemon-reload
