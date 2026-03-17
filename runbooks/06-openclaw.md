@@ -200,9 +200,9 @@ The official method is `paste-token`, which requires a TTY. Run it as the instan
 ```bash
 ssh oc-<OC_NAME>@<IP_ADDRESS>
 export PATH="$HOME/.local/bin:$PATH"
-source ~/.openclaw/env
-openclaw models auth paste-token --provider openai --profile-id openai:manual
+openclaw models auth paste-token --provider openai
 # paste the key when prompted, then press enter
+# creates profile openai:manual (paste-token default name)
 ```
 
 **Workaround if TTY is not available** (e.g. from a script or `sudo -u`): write the profile directly into `auth-profiles.json`:
