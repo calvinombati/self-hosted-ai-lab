@@ -285,10 +285,9 @@ OpenClaw manages its own service file via CLI. You must run this step **as the i
 
 **Why direct SSH is required:** `openclaw gateway install` creates a systemd user service and registers it via `systemctl --user`. This command requires `XDG_RUNTIME_DIR=/run/user/<uid>/` (the directory where the user's D-Bus socket lives) to be set. PAM only initializes this at login time. When you use `sudo su - oc-<OC_NAME>` or `sudo -u oc-<OC_NAME>` from another user, PAM does not create a full user session, `XDG_RUNTIME_DIR` is not set, and `systemctl --user` fails with "Failed to connect to bus". Direct SSH login is the only reliable way to get a complete PAM session.
 
-If you are continuing from Step 4 you are already in the right session. Otherwise:
-
 ```bash
 ssh oc-<OC_NAME>@<IP_ADDRESS>
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Then:
@@ -469,11 +468,9 @@ npm update -g openclaw
 openclaw gateway install --force
 openclaw gateway restart
 
-# Update API key (overwrites existing profile without creating duplicates)
-openclaw models auth paste-token --provider anthropic --profile-id anthropic:default
-
-# Remove a stale profile created by the wizard
-openclaw config unset 'auth.profiles.anthropic:manual'
+# Update an existing API key: check the profile name first, then overwrite it
+openclaw models status   # find the profile name (e.g. anthropic:manual or anthropic:default)
+openclaw models auth paste-token --provider anthropic --profile-id <PROFILE_NAME>
 ```
 
 Live logs (run as admin with sudo):
