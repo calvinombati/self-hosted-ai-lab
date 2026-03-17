@@ -3,25 +3,47 @@ set -euo pipefail
 
 # ============================================================
 # OpenClaw - Multi-instance provisioning script
+#
+# Two distinct phases with different execution contexts:
+#
+#   Phase 1 (root)  — create user, configure npm prefix, install openclaw, enable linger
+#   Phase 2 (user)  — install gateway service, per-user deps, verify
+#
+# Prerequisite for Phase 1: system Node.js 22 LTS already installed
+# (via NodeSource apt repo — once per server, not per instance).
+#
+# Phase 1 can run in batch as root. Phase 2 MUST run as the instance user
+# via a direct SSH session — not via sudo or su. See below for why.
+#
 # Usage:
-#   Phase 1 (setup):    openclaw-provision.sh setup <username> <port>
-#   Phase 2 (service):  openclaw-provision.sh service <username> <port>
-#   Batch:              openclaw-provision.sh batch <config_file> <phase>
-#   Status:             openclaw-provision.sh status
+#   Phase 1 (as root):       openclaw-provision.sh setup <username> <port>
+#   Phase 1 batch (as root): openclaw-provision.sh batch <config_file>
+#   Phase 2 (as oc-* user):  openclaw-provision.sh post-onboard
+#   Status (as root):        openclaw-provision.sh status
+#
+# Why Phase 2 requires direct SSH as the instance user:
+#   openclaw gateway install creates a systemd user service via
+#   `systemctl --user`. This requires XDG_RUNTIME_DIR=/run/user/<uid>/
+#   (where the user's D-Bus socket lives) to be set. PAM only initializes
+#   this at login time. sudo/su does not create a full PAM session, so
+#   XDG_RUNTIME_DIR is not set and systemctl --user fails with
+#   "Failed to connect to bus". Direct SSH is the only reliable path.
 # ============================================================
 
-NVM_VERSION="v0.40.2"
 NODE_MAJOR="22"
 OPENCLAW_PKG="openclaw@latest"
+PER_USER_NPM_PACKAGES="@steipete/summarize"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step()  { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 # --- Validation ---
 validate_inputs() {
@@ -49,180 +71,176 @@ validate_inputs() {
     fi
 }
 
-# --- Phase 1: Setup (user, nvm, node, openclaw) ---
+# --- Phase 1: Setup (runs as root) ---
+# Creates the user, configures npm prefix, installs OpenClaw, enables linger.
+# Stops here — onboarding is interactive and must be done by the user.
 phase_setup() {
     local user="$1"
     local port="$2"
     local home="/srv/${user}"
 
+    if [ "$(id -u)" -ne 0 ]; then
+        log_error "Phase 1 must run as root (sudo)."
+        exit 1
+    fi
+
     log_info "=== PHASE 1: Setup instance '${user}' (port ${port}) ==="
 
+    # Prerequisite: system Node.js must already be installed
+    # One-time server setup: see runbooks/06-openclaw.md Step 2
+    if ! command -v node &>/dev/null; then
+        log_error "System Node.js not found."
+        log_error "Install Node.js ${NODE_MAJOR} LTS via NodeSource before running this script:"
+        log_error "  curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | sudo -E bash -"
+        log_error "  sudo apt install -y nodejs"
+        exit 1
+    fi
+    NODE_VER=$(node --version | grep -oE '[0-9]+' | head -1)
+    if (( NODE_VER < NODE_MAJOR )); then
+        log_error "System Node.js v${NODE_VER} found, v${NODE_MAJOR}+ required."
+        exit 1
+    fi
+    log_info "System Node.js: $(node --version) (ok)"
+
+    # Create user
     if id "$user" &>/dev/null; then
         log_warn "User '$user' already exists. Skipping user creation."
     else
         log_info "Creating user '$user' with home in $home..."
-        sudo useradd -r -s /bin/bash -d "$home" -m "$user"
+        useradd -r -s /bin/bash -d "$home" -m "$user"
     fi
 
-    log_info "Installing nvm, Node.js ${NODE_MAJOR}, and OpenClaw for '$user'..."
+    # Enable linger — required so the user service starts at boot without
+    # an active login session, and so systemctl --user works reliably.
+    log_info "Enabling linger for '$user'..."
+    loginctl enable-linger "$user"
+    log_info "Linger: $(loginctl show-user "$user" | grep Linger)"
 
+    # Configure npm prefix and install OpenClaw
+    # npm prefix in ~/.local keeps binaries in ~/.local/bin without requiring root
+    log_info "Configuring npm prefix and installing OpenClaw for '$user'..."
     sudo -u "$user" bash -l << SETUP_EOF
 set -euo pipefail
 
-# nvm
-if [ ! -d "\$HOME/.nvm" ]; then
-    curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash
+# Configure per-user npm prefix — binaries in ~/.local/bin, no root required
+mkdir -p "\$HOME/.local/bin"
+npm config set prefix "\$HOME/.local"
+
+# Add ~/.local/bin to PATH if not already present
+if ! grep -q '.local/bin' "\$HOME/.bashrc" 2>/dev/null; then
+    echo 'export PATH="\$HOME/.local/bin:\$PATH"' >> "\$HOME/.bashrc"
 fi
 
-export NVM_DIR="\$HOME/.nvm"
-[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
-
-# Node.js
-if ! node --version 2>/dev/null | grep -q "v${NODE_MAJOR}"; then
-    nvm install ${NODE_MAJOR}
-fi
-echo "Node.js: \$(node --version)"
-
-# OpenClaw
-npm install -g ${OPENCLAW_PKG}
-echo "OpenClaw: \$(openclaw --version)"
-echo "Binary: \$(which openclaw)"
+# Install OpenClaw
+PATH="\$HOME/.local/bin:\$PATH" npm install -g ${OPENCLAW_PKG}
+echo "OpenClaw: \$(PATH="\$HOME/.local/bin:\$PATH" openclaw --version)"
 SETUP_EOF
 
-    log_info "Phase 1 complete for '$user'."
+    log_info "Phase 1 complete for '${user}'."
     echo ""
-    log_warn "=== MANUAL ACTION REQUIRED ==="
-    log_warn "Run the interactive onboarding:"
+    echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN} NEXT: complete onboarding for '${user}'${NC}"
+    echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo "    sudo su - ${user}"
-    echo "    cd /srv/${user}"
-    echo "    openclaw onboard"
-    echo "    exit"
+    echo "  1. SSH directly as the instance user (not sudo su):"
     echo ""
-    log_warn "Then run Phase 2:"
+    echo "       ssh ${user}@<IP_ADDRESS>"
     echo ""
-    echo "    sudo openclaw-provision.sh service ${user} ${port}"
+    echo "  2. Run the interactive onboarding wizard:"
+    echo ""
+    echo "       openclaw onboard"
+    echo ""
+    echo "  3. After onboarding, run the post-onboard setup:"
+    echo ""
+    echo "       openclaw-provision.sh post-onboard"
     echo ""
 }
 
-# --- Phase 2: systemd service ---
-phase_service() {
-    local user="$1"
-    local port="$2"
-    local home="/srv/${user}"
-    local service_name="${user}-gateway"
+# --- Phase 2: Post-onboard setup (runs as oc-* user via direct SSH) ---
+# Installs the gateway service, per-user npm deps, verifies the setup.
+# Must run as the instance user — not as root, not via sudo.
+phase_post_onboard() {
+    local user
+    user="$(whoami)"
 
-    log_info "=== PHASE 2: systemd service for '${user}' (port ${port}) ==="
-
-    if ! id "$user" &>/dev/null; then
-        log_error "User '$user' does not exist. Run Phase 1 first."
+    # Refuse to run as root
+    if [ "$(id -u)" -eq 0 ]; then
+        log_error "post-onboard must run as the instance user (oc-*), not root."
+        log_error "SSH directly as the instance user: ssh ${user}@<IP_ADDRESS>"
         exit 1
     fi
 
-    local openclaw_bin
-    openclaw_bin=$(sudo su - "$user" -c "which openclaw" 2>/dev/null || true)
-    if [ -z "$openclaw_bin" ]; then
-        log_error "OpenClaw not found for user '$user'. Run Phase 1 first."
+    if [[ ! "$user" =~ ^oc- ]]; then
+        log_warn "Current user '$user' does not follow the oc-* naming convention. Continuing anyway."
+    fi
+
+    log_info "=== POST-ONBOARD SETUP for '${user}' ==="
+
+    # Ensure ~/.local/bin is in PATH (npm prefix for this user)
+    export PATH="${HOME}/.local/bin:${PATH}"
+
+    # Check onboarding was completed
+    if [ ! -f "${HOME}/.openclaw/openclaw.json" ]; then
+        log_error "OpenClaw config not found. Run 'openclaw onboard' first."
         exit 1
     fi
-    log_info "OpenClaw binary: $openclaw_bin"
 
-    if [ ! -f "${home}/.openclaw/config.json" ]; then
-        log_error "OpenClaw config not found at ${home}/.openclaw/config.json"
-        log_error "Run first: sudo su - ${user} -c 'openclaw onboard'"
-        exit 1
+    # Install gateway service
+    log_step "Installing gateway service..."
+    if openclaw gateway status 2>/dev/null | grep -q "Runtime: running"; then
+        log_info "Gateway already running. Reinstalling service file..."
+        openclaw gateway install --force
+    else
+        openclaw gateway install
     fi
 
-    local perms
-    perms=$(stat -c "%a" "${home}/.openclaw/config.json")
-    if [ "$perms" != "600" ]; then
-        log_warn "config.json permissions are $perms, fixing to 600..."
-        sudo chmod 600 "${home}/.openclaw/config.json"
-    fi
+    # Install per-user npm dependencies
+    log_step "Installing per-user npm packages: ${PER_USER_NPM_PACKAGES}..."
+    for pkg in ${PER_USER_NPM_PACKAGES}; do
+        npm install -g "$pkg" && log_info "Installed: $pkg" || log_warn "Failed to install $pkg — check manually."
+    done
 
-    log_info "Creating service ${service_name}.service..."
-    sudo tee "/etc/systemd/system/${service_name}.service" > /dev/null << SERVICE_EOF
-[Unit]
-Description=OpenClaw Gateway (${user})
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${user}
-WorkingDirectory=${home}
-ExecStart=${openclaw_bin} gateway run --port ${port}
-Environment=HOME=${home}
-Environment=NODE_ENV=production
-Environment=PATH=$(dirname ${openclaw_bin}):/usr/local/bin:/usr/bin:/bin
-EnvironmentFile=-${home}/.openclaw/env
-StandardOutput=journal
-StandardError=journal
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-SERVICE_EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable "${service_name}.service"
-    sudo systemctl start "${service_name}.service"
-
+    # Verify gateway — install already ran daemon-reload + enable + restart internally
+    log_step "Verifying gateway..."
     sleep 3
+    openclaw gateway status
 
-    if sudo systemctl is-active --quiet "${service_name}.service"; then
-        log_info "Service ${service_name} is active."
-    else
-        log_error "Service ${service_name} failed to start. Check logs:"
-        echo "    sudo journalctl -u ${service_name} -n 30"
-        exit 1
+    # Check port binding
+    local port
+    port=$(openclaw gateway status 2>/dev/null | grep -oE 'port=[0-9]+' | grep -oE '[0-9]+' || true)
+    if [ -n "$port" ]; then
+        if ss -tulpn | grep -q "127.0.0.1:${port}"; then
+            log_info "Port ${port} listening on 127.0.0.1 (correct)."
+        elif ss -tulpn | grep -q "0.0.0.0:${port}"; then
+            log_error "Port ${port} is exposed on 0.0.0.0 — stop the service immediately!"
+            openclaw gateway stop
+            exit 1
+        fi
     fi
 
-    if ss -tulpn | grep -q "127.0.0.1:${port}"; then
-        log_info "Port ${port} listening on 127.0.0.1 (correct)."
-    elif ss -tulpn | grep -q "0.0.0.0:${port}"; then
-        log_error "Port ${port} exposed on 0.0.0.0! Stopping service for safety."
-        sudo systemctl stop "${service_name}.service"
-        exit 1
-    else
-        log_warn "Port ${port} not found listening. Service may need more time to start."
-    fi
+    # Run doctor
+    log_step "Running openclaw doctor..."
+    openclaw doctor
 
     echo ""
-    log_info "=== Provisioning complete for '${user}' ==="
-    echo "    Port:    ${port}"
-    echo "    Service: ${service_name}.service"
-    echo "    Tunnel:  ssh -L ${port}:localhost:${port} <USER>@<IP_ADDRESS> -N"
-    echo "    Browser: http://localhost:${port}"
+    log_info "=== Post-onboard complete for '${user}' ==="
     echo ""
 }
 
-# --- Batch mode ---
-phase_batch() {
-    local config_file="$1"
-    local phase="$2"
-
-    if [ ! -f "$config_file" ]; then
-        log_error "Config file '$config_file' not found."
-        exit 1
-    fi
-
-    log_info "Batch processing from '$config_file' (phase: $phase)..."
-
-    while IFS= read -r line; do
-        # Strip trailing comments and skip empty/comment-only lines
-        line="${line%%#*}"
-        [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]] && continue
-        read -r user port <<< "$line"
-        [[ -z "$user" || -z "$port" ]] && continue
-        validate_inputs "$user" "$port"
-        case "$phase" in
-            setup)   phase_setup "$user" "$port" ;;
-            service) phase_service "$user" "$port" ;;
-            *)       log_error "Invalid phase '$phase'. Use 'setup' or 'service'."; exit 1 ;;
-        esac
-    done < "$config_file"
+# --- Status (runs as root) ---
+phase_status() {
+    echo "=== Active OpenClaw instances (ports *789) ==="
+    ss -tulpn | grep -E ":[0-9]*789 " || echo "No *789 ports listening."
+    echo ""
+    echo "=== Linger status for oc-* users ==="
+    while IFS=: read -r u _ _ _ _ home _; do
+        [[ "$u" =~ ^oc- ]] || continue
+        if [ -f "/var/lib/systemd/linger/$u" ]; then
+            echo "  $u: Linger=yes"
+        else
+            echo "  $u: Linger=no"
+        fi
+    done < /etc/passwd
 }
 
 # --- Main ---
@@ -232,38 +250,52 @@ case "${1:-}" in
         validate_inputs "$2" "$3"
         phase_setup "$2" "$3"
         ;;
-    service)
-        [ $# -ne 3 ] && { echo "Usage: $0 service <username> <port>"; exit 1; }
-        validate_inputs "$2" "$3"
-        phase_service "$2" "$3"
-        ;;
     batch)
-        [ $# -ne 3 ] && { echo "Usage: $0 batch <config_file> <setup|service>"; exit 1; }
-        phase_batch "$2" "$3"
+        [ $# -ne 2 ] && { echo "Usage: $0 batch <config_file>"; exit 1; }
+        config_file="$2"
+        if [ ! -f "$config_file" ]; then
+            log_error "Config file '$config_file' not found."
+            exit 1
+        fi
+        if [ "$(id -u)" -ne 0 ]; then
+            log_error "Batch setup must run as root (sudo)."
+            exit 1
+        fi
+        log_info "Batch Phase 1 from '$config_file'..."
+        while IFS= read -r line; do
+            line="${line%%#*}"
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]] && continue
+            read -r user port <<< "$line"
+            [[ -z "$user" || -z "$port" ]] && continue
+            validate_inputs "$user" "$port"
+            phase_setup "$user" "$port"
+        done < "$config_file"
+        echo ""
+        log_info "Batch Phase 1 complete. Now SSH as each user and run post-onboard."
+        ;;
+    post-onboard)
+        phase_post_onboard
         ;;
     status)
-        echo "=== Active OpenClaw instances ==="
-        systemctl list-units --type=service --state=running | grep -E "(oc-|openclaw).*gateway" || echo "No running instances."
-        echo ""
-        echo "=== OpenClaw ports listening ==="
-        ss -tulpn | grep -E ":[0-9]*789 " || echo "No *789 ports listening."
+        phase_status
         ;;
     *)
         echo "OpenClaw Instance Provisioner"
         echo ""
         echo "Usage:"
-        echo "  $0 setup <username> <port>                Phase 1: create user, install nvm/node/openclaw"
-        echo "  $0 service <username> <port>              Phase 2: create systemd service and start"
-        echo "  $0 batch <config_file> <setup|service>    Process multiple instances from file"
-        echo "  $0 status                                 Show active instances"
+        echo "  sudo $0 setup <username> <port>    Phase 1: create user, configure npm prefix, install openclaw, enable linger"
+        echo "  sudo $0 batch <config_file>        Phase 1 in batch for all instances in file"
+        echo "  $0 post-onboard                    Phase 2: install service, deps, verify"
+        echo "                                     (run as oc-* user via direct SSH, not sudo)"
+        echo "  sudo $0 status                     Show active instances and linger status"
         echo ""
-        echo "Example:"
-        echo "  $0 setup oc-work 18789"
-        echo "  # ... run manual onboarding ..."
-        echo "  $0 service oc-work 18789"
+        echo "Typical workflow:"
+        echo "  sudo $0 setup oc-work 18789"
+        echo "  ssh oc-work@<IP>                   # direct SSH as instance user"
+        echo "  openclaw onboard                   # interactive wizard"
+        echo "  $0 post-onboard                    # install service and verify"
         echo ""
-        echo "  $0 batch /srv/openclaw-instances.conf setup"
-        echo "  # ... run onboarding for each instance ..."
-        echo "  $0 batch /srv/openclaw-instances.conf service"
+        echo "  # Or batch Phase 1, then SSH per user for onboard + post-onboard:"
+        echo "  sudo $0 batch /srv/openclaw-instances.conf"
         ;;
 esac

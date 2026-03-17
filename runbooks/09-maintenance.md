@@ -43,14 +43,23 @@ docker image prune -f
 
 ## OpenClaw updates
 
-Per instance:
+Per instance (run as the instance user via direct SSH):
 
 ```bash
-sudo su - oc-<OC_NAME> -c "npm update -g openclaw && openclaw --version"
-sudo systemctl restart oc-<OC_NAME>-gateway
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+npm update -g openclaw
+openclaw gateway install --force
+openclaw gateway restart
 ```
 
-If Node.js major version changes (e.g., v22 to v24), update the `ExecStart` path in the systemd service file.
+`gateway install --force` rewrites the service file with the current entrypoint and defaults. Required after OpenClaw updates that change the service configuration.
+
+If Node.js major version changes (e.g., v22 to v24), restart the gateway to pick up the new binary — no service file changes needed since the path `/usr/bin/node` stays the same:
+
+```bash
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+openclaw gateway restart
+```
 
 ## Versioned components registry
 
@@ -58,8 +67,7 @@ Check this table before a new provisioning or after several months.
 
 | Component | Pinned version | Where to check for updates |
 |---|---|---|
-| **nvm** | `v0.40.2` (URL with explicit version) | [nvm releases](https://github.com/nvm-sh/nvm/releases) |
-| **Node.js** | `22` LTS (via nvm) | [nodejs.org/releases](https://nodejs.org/en/about/releases/) |
+| **Node.js** | `22` LTS (via NodeSource apt, `setup_22.x`) | [nodejs.org/releases](https://nodejs.org/en/about/releases/) |
 | **PostgreSQL** | `16-alpine` (major pinned) | [postgresql.org/versioning](https://www.postgresql.org/support/versioning/) |
 | **Caddy** | `2-alpine` (auto-updates minor/patch) | [caddy releases](https://github.com/caddyserver/caddy/releases) |
 | **Docker CE** | From official repo | [docker release notes](https://docs.docker.com/engine/release-notes/) |
@@ -68,7 +76,7 @@ Check this table before a new provisioning or after several months.
 | **Uptime Kuma** | `1` (major pinned) | [uptime-kuma releases](https://github.com/louislam/uptime-kuma/releases) |
 | **restic** | From apt repo | [restic releases](https://github.com/restic/restic/releases) |
 
-> Note: URLs with explicit versions (like nvm) do NOT auto-update. If you copy the cloud-init template months later without checking this table, you install today's version.
+> Note: components with a pinned major version (like Node.js `setup_22.x`, PostgreSQL `16-alpine`) do not auto-upgrade to the next major. Check this table periodically and update the pinned version in the relevant runbook or template when upgrading.
 
 ## SSH key rotation
 

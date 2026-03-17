@@ -10,8 +10,6 @@ OpenClaw AI gateway: single-instance setup and multi-instance provisioning. Runs
 | `<IP_ADDRESS>` | Server IPv4 | `203.0.113.10` |
 | `<OC_NAME>` | Instance short name | `work` |
 | `<OC_PORT>` | Instance port (*789 pattern) | `18789` |
-| `<OPENCLAW_BIN_PATH>` | Full path to openclaw binary (from Step 3) | `/srv/oc-work/.nvm/versions/node/v22.22.1/bin/openclaw` |
-| `<NODE_VERSION>` | Node.js version installed via nvm | `v22.22.1` |
 
 ## Architecture
 
@@ -28,7 +26,7 @@ Security model:
 - API keys protected with `600` permissions
 - No firewall ports to open (not on UFW, not on provider firewall)
 
-> Note: OpenClaw is installed natively (Node.js + systemd) instead of Docker. The application requires an interactive onboarding wizard (`openclaw onboard`) and stores config in `~/.openclaw/config.json`. Containerization would add complexity without real benefit for a single-user gateway.
+> Note: OpenClaw is installed natively (Node.js + systemd) instead of Docker. The application requires an interactive onboarding wizard (`openclaw onboard`) and stores config in `~/.openclaw/openclaw.json`. Containerization would add complexity without real benefit for a single-user gateway.
 
 ## Part A - Single instance
 
@@ -46,37 +44,42 @@ ls -la /srv/ | grep oc-<OC_NAME>
 
 Verify: directory exists, owned by `oc-<OC_NAME>`.
 
-### Step 2 - Install nvm + Node.js
+### Step 2 - Install Node.js (system, once per server)
+
+Node.js is installed at the system level via NodeSource. This step runs **once per server** as your admin user — not repeated for each instance. All `oc-*` instances share the same system binary (`/usr/bin/node`).
 
 ```bash
-sudo -u oc-<OC_NAME> bash -l << 'SETUP'
-# Install nvm
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
-
-# Load nvm
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-# Install Node.js 22 LTS
-nvm install 22
-echo "Node.js: $(node --version)"
-SETUP
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
 ```
 
 Verify:
 
 ```bash
-sudo su - oc-<OC_NAME> -c "node --version"
+node --version
+npm --version
 ```
 
-Verify: output is `v22.x.x`.
+Verify: output is `v22.x.x`. Skip this step if Node.js 22+ is already installed.
 
-> Note: nvm URL contains an explicit version (`v0.40.2`) that does not auto-update. Check [nvm releases](https://github.com/nvm-sh/nvm/releases) before a new provisioning.
+> Note: the system Node.js path (`/usr/bin/node`) is stable and does not change with upgrades. This makes the systemd service file reliable — the entrypoint path written by `openclaw gateway install` stays valid after Node.js upgrades.
 
 ### Step 3 - Install OpenClaw
 
+Configure the per-user npm prefix and install OpenClaw. The prefix `~/.local` keeps binaries in `~/.local/bin` without requiring root.
+
 ```bash
-sudo su - oc-<OC_NAME> -c "npm install -g openclaw@latest"
+sudo -u oc-<OC_NAME> bash -l << 'SETUP'
+mkdir -p "$HOME/.local/bin"
+npm config set prefix "$HOME/.local"
+
+if ! grep -q '.local/bin' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+fi
+
+PATH="$HOME/.local/bin:$PATH" npm install -g openclaw@latest
+echo "OpenClaw: $(PATH="$HOME/.local/bin:$PATH" openclaw --version)"
+SETUP
 ```
 
 Verify:
@@ -85,30 +88,30 @@ Verify:
 sudo su - oc-<OC_NAME> -c "openclaw --version && which openclaw"
 ```
 
-Verify: version string and path like `/srv/oc-<OC_NAME>/.nvm/versions/node/v22.x.x/bin/openclaw`.
-
-Save the full path from `which openclaw` - you need it for the systemd service.
+Verify: version string and path like `/srv/oc-<OC_NAME>/.local/bin/openclaw`.
 
 ### Step 4 - Onboarding (interactive)
 
+SSH directly as the instance user (same session you'll continue using in Step 7):
+
 ```bash
-sudo su - oc-<OC_NAME>
-cd /srv/oc-<OC_NAME>
+ssh oc-<OC_NAME>@<IP_ADDRESS>
 openclaw onboard
 # Follow the wizard: select provider, enter API key
-exit
 ```
 
-Verify config permissions:
+Stay in this SSH session to continue with the steps below.
+
+Verify config permissions (still in the SSH session as oc-<OC_NAME>):
 
 ```bash
-sudo ls -la /srv/oc-<OC_NAME>/.openclaw/config.json
+ls -la ~/.openclaw/openclaw.json
 ```
 
 Verify: permissions are `-rw-------` (600). If not:
 
 ```bash
-sudo chmod 600 /srv/oc-<OC_NAME>/.openclaw/config.json
+chmod 600 ~/.openclaw/openclaw.json
 ```
 
 ### Step 5 - Install skill dependencies
@@ -148,13 +151,10 @@ uv --version
 
 #### Per-user dependencies (for each oc-* user)
 
-Run for the specific `oc-*` user. Since nvm only loads in interactive shells, source it explicitly:
-
 ```bash
 sudo -u oc-<OC_NAME> bash -c '
   export HOME=/srv/oc-<OC_NAME>
-  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
-  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
 
   # @steipete/summarize - web/document summarization (summarize skill)
   npm install -g @steipete/summarize
@@ -166,13 +166,12 @@ Verify all dependencies are detected:
 ```bash
 sudo -u oc-<OC_NAME> bash -c '
   export HOME=/srv/oc-<OC_NAME>
-  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
-  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
   openclaw doctor
 '
 ```
 
-The "Skills status" section should show no missing requirements for the enabled skills. Warnings about systemd user services are expected and resolved in the next step.
+The "Skills status" section should show no missing requirements for the enabled skills. Warnings about linger not being enabled and the gateway service not yet being installed are expected — they are resolved in Steps 6 and 7.
 
 #### Memory search (optional but recommended)
 
@@ -185,8 +184,7 @@ Configure the provider:
 ```bash
 sudo -u oc-<OC_NAME> bash -c '
   export HOME=/srv/oc-<OC_NAME>
-  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
-  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
   openclaw config set agents.defaults.memorySearch.provider openai
 '
 ```
@@ -199,15 +197,14 @@ sudo chown oc-<OC_NAME>:oc-<OC_NAME> /srv/oc-<OC_NAME>/.openclaw/env
 sudo chmod 600 /srv/oc-<OC_NAME>/.openclaw/env
 ```
 
-This file will be loaded by the systemd service in the next step via `EnvironmentFile`. Do not put API keys directly in service files (they are readable by any user via `systemctl cat`).
+This file will be loaded by the systemd service in Step 7 via `EnvironmentFile`. Do not put API keys directly in service files (they are readable by any user via `systemctl cat`).
 
 Verify (pass the key for the check):
 
 ```bash
 sudo -u oc-<OC_NAME> bash -c '
   export HOME=/srv/oc-<OC_NAME>
-  export NVM_DIR=/srv/oc-<OC_NAME>/.nvm
-  source /srv/oc-<OC_NAME>/.nvm/nvm.sh
+  export PATH=/srv/oc-<OC_NAME>/.local/bin:$PATH
   source /srv/oc-<OC_NAME>/.openclaw/env
   openclaw memory status
 '
@@ -215,51 +212,56 @@ sudo -u oc-<OC_NAME> bash -c '
 
 Verify: `provider` is `openai` and `searchMode` is `hybrid`. If you skip this step, memory search falls back to `fts-only` (full-text search without vector embeddings).
 
-### Step 6 - Create systemd service
+### Step 6 - Enable linger
 
-Replace `<OPENCLAW_BIN_PATH>` and `<NODE_VERSION>` with values from Step 3. The `PATH` environment variable is required because nvm only loads in interactive shells (Ubuntu's `.bashrc` has a non-interactive guard), so systemd cannot find node or skill dependencies without it.
+Before installing the service, enable **linger** for the instance user. This is required for two reasons:
 
-```bash
-sudo tee /etc/systemd/system/oc-<OC_NAME>-gateway.service > /dev/null << EOF
-[Unit]
-Description=OpenClaw Gateway (oc-<OC_NAME>)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=oc-<OC_NAME>
-WorkingDirectory=/srv/oc-<OC_NAME>
-ExecStart=<OPENCLAW_BIN_PATH> gateway run --port <OC_PORT>
-Environment=HOME=/srv/oc-<OC_NAME>
-Environment=NODE_ENV=production
-Environment=PATH=/srv/oc-<OC_NAME>/.nvm/versions/node/<NODE_VERSION>/bin:/usr/local/bin:/usr/bin:/bin
-EnvironmentFile=-/srv/oc-<OC_NAME>/.openclaw/env
-StandardOutput=journal
-StandardError=journal
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-### Step 7 - Enable and start
+1. The user service starts automatically at boot, even without an active login session
+2. The user's systemd instance stays alive after SSH disconnects
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable oc-<OC_NAME>-gateway
-sudo systemctl start oc-<OC_NAME>-gateway
+sudo loginctl enable-linger oc-<OC_NAME>
 ```
 
 Verify:
 
 ```bash
-sudo systemctl status oc-<OC_NAME>-gateway
+loginctl show-user oc-<OC_NAME> | grep Linger
 ```
 
-Verify: `active (running)`.
+Verify: `Linger=yes`.
+
+### Step 7 - Install the service
+
+OpenClaw manages its own service file via CLI. You must run this step **as the instance user via a direct SSH session** — not via `sudo su` or `sudo -u`.
+
+**Why direct SSH is required:** `openclaw gateway install` creates a systemd user service and registers it via `systemctl --user`. This command requires `XDG_RUNTIME_DIR=/run/user/<uid>/` (the directory where the user's D-Bus socket lives) to be set. PAM only initializes this at login time. When you use `sudo su - oc-<OC_NAME>` or `sudo -u oc-<OC_NAME>` from another user, PAM does not create a full user session, `XDG_RUNTIME_DIR` is not set, and `systemctl --user` fails with "Failed to connect to bus". Direct SSH login is the only reliable way to get a complete PAM session.
+
+If you are continuing from Step 4 you are already in the right session. Otherwise:
+
+```bash
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+```
+
+Then:
+
+```bash
+openclaw gateway install
+```
+
+OpenClaw generates the service file automatically with the correct entrypoint, PATH, and environment variables. No manual editing required. To reinstall (e.g. after an OpenClaw update that changes the entrypoint):
+
+```bash
+openclaw gateway install --force
+```
+
+Verify:
+
+```bash
+openclaw gateway status
+```
+
+Verify: `Runtime: running` and no warnings about service config.
 
 ```bash
 ss -tulpn | grep <OC_PORT>
@@ -302,7 +304,7 @@ For multiple independent OpenClaw instances (per project, per client, per API ke
 | Username | `oc-<name>` | `oc-work`, `oc-personal` |
 | Home directory | `/srv/oc-<name>/` | `/srv/oc-work/` |
 | Port | `N*1000+789` | 18789, 19789, 20789 |
-| Service | `oc-<name>-gateway.service` | `oc-work-gateway.service` |
+| Service | `openclaw-gateway.service` (same for all instances) | `openclaw-gateway.service` |
 
 The last 3 digits (`789`) are a "signature" to instantly recognize OpenClaw ports in `ss -tulpn` or logs.
 
@@ -336,37 +338,42 @@ sudo chmod +x /usr/local/bin/openclaw-provision.sh
 
 The script has two phases:
 
-- **Phase 1 (setup):** creates user, installs nvm/Node.js/OpenClaw. Stops for manual onboarding.
-- **Phase 2 (service):** creates systemd service, enables, starts, verifies binding.
+- **Phase 1 (setup):** creates user, configures npm prefix, installs OpenClaw (requires system Node.js), enables linger. Stops for manual onboarding.
+- **Phase 2 (post-onboard):** runs `openclaw gateway install`, installs per-user npm packages, verifies binding. Must run as the instance user via direct SSH.
 
-### Batch provisioning workflow
+### Provisioning workflow
+
+> **Prerequisite:** each instance user must be allowed to SSH directly. Add them to `AllowUsers` in your SSH hardening config (e.g. `/etc/ssh/sshd_config.d/99-hardening.conf`) before running post-onboard:
+> ```
+> AllowUsers <USER> oc-work oc-personal
+> ```
+> Then reload: `sudo systemctl reload sshd`
+
+Phase 1 (user/openclaw setup) can run in batch as root. Phase 2 (service install) **cannot be batched** — it requires a direct SSH session per user for the reasons explained in Step 7. Onboarding is also interactive by design.
 
 ```bash
-# Phase 1: setup all instances
-sudo openclaw-provision.sh batch /srv/openclaw-instances.conf setup
+# Phase 1: setup all instances (can run in batch as root)
+sudo openclaw-provision.sh batch /srv/openclaw-instances.conf
+```
 
-# Manual onboarding for each instance
-sudo su - oc-work
-cd /srv/oc-work && openclaw onboard
+Then, for each instance, open a direct SSH session and complete onboarding and post-onboard setup:
+
+```bash
+# Onboard and install service — must be done via direct SSH as each user
+ssh oc-work@<IP_ADDRESS>
+openclaw onboard       # interactive wizard: provider, API key, channel, skills
+openclaw-provision.sh post-onboard   # gateway install, npm deps, verify
 exit
 
-sudo su - oc-personal
-cd /srv/oc-personal && openclaw onboard
+ssh oc-personal@<IP_ADDRESS>
+openclaw onboard
+openclaw-provision.sh post-onboard
 exit
+```
 
-# Install per-user dependencies for each instance (see Step 5)
-for user in oc-work oc-personal; do
-  sudo -u "$user" bash -c "
-    export HOME=/srv/$user NVM_DIR=/srv/$user/.nvm
-    source /srv/$user/.nvm/nvm.sh
-    npm install -g @steipete/summarize
-  "
-done
+Verify all instances:
 
-# Phase 2: create services and start
-sudo openclaw-provision.sh batch /srv/openclaw-instances.conf service
-
-# Verify all instances
+```bash
 sudo openclaw-provision.sh status
 ```
 
@@ -392,27 +399,51 @@ Then: `ssh -N oc-tunnel`
 
 ## Management commands
 
-```bash
-# Status
-sudo systemctl status oc-<OC_NAME>-gateway
+Run as the instance user via direct SSH:
 
-# Live logs
-sudo journalctl -u oc-<OC_NAME>-gateway -f
+```bash
+ssh oc-<OC_NAME>@<IP_ADDRESS>
+
+# Status (shows service warnings if service file is outdated)
+openclaw gateway status
+
+# Health check (channels, agent, sessions)
+openclaw health
+
+# Full diagnostics
+openclaw doctor
 
 # Restart
-sudo systemctl restart oc-<OC_NAME>-gateway
+openclaw gateway restart
 
-# Update OpenClaw
-sudo su - oc-<OC_NAME> -c "npm update -g openclaw"
-sudo systemctl restart oc-<OC_NAME>-gateway
+# Update OpenClaw and refresh service file
+npm update -g openclaw
+openclaw gateway install --force
+openclaw gateway restart
 
-# Modify API keys
-sudo su - oc-<OC_NAME>
-openclaw configure
-exit
-sudo systemctl restart oc-<OC_NAME>-gateway
+# Update API key (overwrites existing profile without creating duplicates)
+openclaw models auth paste-token --provider anthropic --profile-id anthropic:default
 
-# All instances status
+# Remove a stale profile created by the wizard
+openclaw config unset 'auth.profiles.anthropic:manual'
+```
+
+Live logs (run as admin with sudo):
+
+```bash
+# Find the UID of the instance user
+id -u oc-<OC_NAME>
+
+# Live logs
+sudo journalctl -u "user@<UID>.service" -f
+
+# Last 100 lines
+sudo journalctl -u "user@<UID>.service" -n 100
+```
+
+All instances status (run as admin):
+
+```bash
 sudo openclaw-provision.sh status
 ```
 
@@ -420,27 +451,28 @@ sudo openclaw-provision.sh status
 
 | Problem | Diagnosis | Fix |
 |---|---|---|
-| Service won't start | `sudo systemctl status oc-<OC_NAME>-gateway -l` | Verify ExecStart path: `sudo su - oc-<OC_NAME> -c "which openclaw"` |
+| `gateway install` fails with "Failed to connect to bus" | Running via `sudo su` instead of direct SSH | SSH directly as the instance user: `ssh oc-<OC_NAME>@<IP>` |
+| Service won't start at boot | `loginctl show-user oc-<OC_NAME> \| grep Linger` | Enable linger: `sudo loginctl enable-linger oc-<OC_NAME>` |
+| Service file outdated after update | `openclaw gateway status` shows warnings | Run `openclaw gateway install --force` via direct SSH as instance user |
 | Port already in use | `ss -tulpn \| grep <OC_PORT>` | Kill the process: `sudo kill $(sudo lsof -t -i :<OC_PORT>)` |
-| `openclaw: command not found` in service | Wrong nvm path in ExecStart | Update path with correct Node.js version |
 | SSH tunnel won't connect | `ssh -v -L <OC_PORT>:localhost:<OC_PORT> <USER>@<IP_ADDRESS>` | Check service is running, port 22 is accessible |
-| Empty journalctl output | Service active but no logs | Add `StandardOutput=journal` to service file, reload, restart |
+| API key rejected | `openclaw models status` via SSH as instance user | Use `openclaw models auth paste-token --provider anthropic --profile-id anthropic:default` |
 
 ## Checklist (per instance)
 
 - [ ] Dedicated user created with home in `/srv/oc-<OC_NAME>/`
-- [ ] nvm installed
-- [ ] Node.js 22+ installed via nvm
+- [ ] System Node.js 22+ installed via NodeSource (once per server)
+- [ ] npm prefix `~/.local` configured for instance user
 - [ ] OpenClaw installed
-- [ ] Onboarding completed, API keys configured
-- [ ] config.json permissions are `600`
+- [ ] Onboarding completed, API keys configured (done via direct SSH as instance user)
 - [ ] Global dependencies installed (ffmpeg, gh, uv) - once per server
 - [ ] Per-user dependencies installed (@steipete/summarize)
 - [ ] `openclaw doctor` shows no missing requirements for enabled skills
 - [ ] (Optional) Memory search configured with embedding provider and env file
-- [ ] systemd service created with correct ExecStart path and EnvironmentFile
-- [ ] Service enabled and running
-- [ ] Listening on `127.0.0.1:<OC_PORT>` (verified with `ss`)
+- [ ] Linger enabled: `loginctl show-user oc-<OC_NAME> | grep Linger` → `Linger=yes`
+- [ ] `openclaw gateway install` run via direct SSH as instance user
+- [ ] `openclaw gateway status` shows no warnings
+- [ ] Listening on `127.0.0.1:<OC_PORT>` (verified with `ss -tulpn | grep <OC_PORT>`)
 - [ ] SSH tunnel works from local machine
 - [ ] Web access on `http://localhost:<OC_PORT>` works
 - [ ] (Multi-instance) `/srv/openclaw-instances.conf` updated
