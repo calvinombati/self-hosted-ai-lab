@@ -92,15 +92,16 @@ Verify: version string and path like `/srv/oc-<OC_NAME>/.local/bin/openclaw`.
 
 ### Step 4 - Onboarding (interactive)
 
-SSH directly as the instance user (same session you'll continue using in Step 7):
+SSH directly as the instance user:
 
 ```bash
 ssh oc-<OC_NAME>@<IP_ADDRESS>
+export PATH="$HOME/.local/bin:$PATH"
 openclaw onboard
 # Follow the wizard: select provider, enter API key
 ```
 
-Stay in this SSH session to continue with the steps below.
+After onboarding you can exit this session. Steps 5A, 5C, and 6 run as admin. Steps 5B and 7 require you to SSH back as `oc-<OC_NAME>`.
 
 Verify config permissions (still in the SSH session as oc-<OC_NAME>):
 
@@ -211,8 +212,12 @@ openclaw models auth paste-token --provider openai
 sudo -u oc-<OC_NAME> python3 - <<'EOF'
 import json, os
 path = os.path.expanduser("~/.openclaw/agents/main/agent/auth-profiles.json")
-with open(path) as f:
-    data = json.load(f)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+try:
+    with open(path) as f:
+        data = json.load(f)
+except FileNotFoundError:
+    data = {"version": 1, "profiles": {}, "usageStats": {}}
 data["profiles"]["openai:manual"] = {
     "type": "api_key",
     "provider": "openai",
